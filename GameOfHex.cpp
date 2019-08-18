@@ -338,7 +338,20 @@ public:
 	}
 	
 	int getBoardSize() const {return boardSize;}
+	
 	void setMcTrials(int i){trials=i;}
+	
+	void revertBoard(){		
+		for (int i=0;i<stones.size();i++){
+			if(stones[i]==boardCell::red){
+				stones[i]=boardCell::blue;
+			}else if(stones[i]==boardCell::blue){
+				stones[i]=boardCell::red;
+			}
+		}	
+	}
+	
+	
 	void printWinner(){
 		if (isWinner(boardCell::red)){std::cout<<"\n======O WINS======\n\n"<<std::endl;}
 		else if(isWinner(boardCell::blue)){std::cout<<"\n======X WINS======\n\n"<<std::endl;}
@@ -353,10 +366,6 @@ public:
 		std::cout << "\nPlayer O: Left <-> Right"<<std::endl;
 		std::cout << "Player X: Top <-> Bottom"<<std::endl;
 		
-		/*
-		Test printing moves
-
-		*/
 		
 		for (int i=0;i<2*boardSize;i++){
 			if(i==0){	//Header
@@ -409,6 +418,27 @@ public:
 			}
 			std::cout << std::endl;	
 		}
+	}
+	
+	int isValidMove(int const row, int const col, boardCell const player){
+		int idx = toListIdx(row, col);	
+		
+		if (static_cast<int>(stones[idx])){
+			std::cout <<"occupied Cell. Invalid Move."<< std::endl;
+			return 0;
+		}
+		switch (player){
+			case boardCell::red: 
+				break;
+				
+			case boardCell::blue: 
+				break;
+				
+			default: 
+				std::cout <<"Invalid input"<< std::endl;
+				return 0;
+		}
+		return 1;	
 	}
 	
 	int makeMove(int const row, int const col, boardCell const player){
@@ -551,10 +581,7 @@ public:
 				moveShuffle[numRed+i]=2;
 			}
 
-			std::random_shuffle(moveShuffle.begin(), moveShuffle.end()); 		
-			//http://www.cplusplus.com/reference/algorithm/shuffle/
-			//std::shuffle ( moveShuffle.begin(), moveShuffle.end(),  rng);
-			
+			std::random_shuffle(moveShuffle.begin(), moveShuffle.end()); 					
 
 			for (int i=0;i<emptyIdx.size();i++){
 				stones[emptyIdx[i]]=static_cast<boardCell>(moveShuffle[i]);
@@ -601,6 +628,34 @@ public:
 		
 	}
 	
+	int aiFirstMove(boardCell aiColor){
+		
+		//Special method to make the first move under the constraint of pie rule.
+		//Try to find the most even move (win prob=0.5) for both players
+		
+		std::cout << "Computer move: \nCalculating...(Takes 10~20s)" <<std::endl;
+		std::vector<int> possibleMoves;	//keep a record of which cells on the board are empty
+		
+		for (int i=0;i<stones.size();i++){
+			if (stones[i]==boardCell::empty){
+				possibleMoves.push_back(i);
+			}
+		}
+		
+		std::vector<double> mcScore;
+
+		for(auto x:possibleMoves){
+			//std::cout << "Evaluating: " << x <<std::endl;
+			//Find the move that has score closest to 50%
+			mcScore.push_back(abs(mcEval(x, aiColor)-0.5));
+		}
+		
+		int minIndex = possibleMoves[std::min_element(mcScore.begin(),mcScore.end()) - mcScore.begin()];		
+		
+		makeMove(minIndex/boardSize , minIndex%boardSize, aiColor);
+		
+	}
+	
 	
 	
 	~hexBoard() {} 
@@ -613,56 +668,98 @@ public:
 
 int main(){
 	
-
+	int mcTrials=1000;
+	
 	srand(clock());
-	hexBoard test(11);
-	test.initBoard();
-	test.setMcTrials(1000);
+	hexBoard GameBoard(11);
+	GameBoard.initBoard();
+	GameBoard.setMcTrials(mcTrials);
 	
 	int a, b;
 	int pFirst;
 	int validMove=0;
+	int pRevert=0;
 	
-	/*
-	std::cout<<"Do you want to start first ? [Yes=1/No=0]";
+	std::cout<<"Do you want to start first ? [Yes=1/No=0]\n";
 	std::cin >> pFirst;
 	while ( (pFirst!=0) && (pFirst!=1)){
-		std::cout<<"Invalid Input. [Yes=1/No=0]";
+		std::cout<<"Invalid Input. [Yes=1/No=0]\n";
 		std::cin >> pFirst;
 	}
 	
+	GameBoard.printBoard();
+	
+	//Implement swap rule:
 	switch (pFirst){
-		case 1: 
-			//Player make move block
+		case 1: //When player is first
+		
+			//Player choose move
+			std::cout << "Your Turn: Enter row and column:"<<std::endl;
+			std::cin >> a >> b;
 			while (!validMove){
-				validMove=test.makeMove(a-1,b-1,boardCell::red);
+				validMove=GameBoard.isValidMove(a-1,b-1,boardCell::red);
 				if (!validMove){
 					std::cout << "Invalid Move. Try again...\nEnter row and column:"<<std::endl;
 					std::cin >> a >> b;
 				}
-			}；
+			}
+			validMove=0;
+			//Determine if ai likes this move
+			double fmove;
+			//Use a higher trial to determine the first hand
+			GameBoard.setMcTrials(10000);
+			fmove=GameBoard.mcEval(GameBoard.toListIdx(a-1,b-1), boardCell::red);
+			GameBoard.setMcTrials(mcTrials);
 			
-			test.mcEval(test.toListIdx(a-1,b-1), boardCell::red);
+			if (fmove>0.51){
+				//GameBoard.switchMovePlayer(a-1,b-1);
+				GameBoard.makeMove(a-1,b-1,boardCell::blue);
+				std::cout <<"Your opponent likes your move! Pie rule apply!"<< std::endl;
+				std::cout << "First player was switched. Now you are the second player"<<std::endl;
+			}else{
+				GameBoard.makeMove(a-1,b-1,boardCell::red);
+				GameBoard.printBoard();
+				GameBoard.aiMove(boardCell::blue);
+			}
 			
-			break
+			
+			break;
 		case 0: 
-			break
-		default:
-			break
+			
+			GameBoard.aiFirstMove(boardCell::blue);
+			GameBoard.printBoard();
+			
+			std::cout<<"Do you want to take over that first move? [Yes=1/No=0]\n";
+			std::cin >> pRevert;
+			while ( (pRevert!=0) && (pRevert!=1)){
+				std::cout<<"Invalid Input. [Yes=1/No=0]\n";
+				std::cin >> pRevert;
+			}
+			switch (pRevert){
+				case 1: //When player is first
+					GameBoard.revertBoard();
+					std::cout << "First player was switched. Now you are the first player"<<std::endl;
+					GameBoard.printBoard();
+					GameBoard.aiMove(boardCell::blue);
+					break;
+
+				default:
+					break;
+			}
 	}	
-	*/	
+		
 
 	//Start turns
 	
 	while (1){
-		test.printBoard();
+		GameBoard.printBoard();
 		
 		std::cout << "Your Turn: Enter row and column:"<<std::endl;
 		std::cin >> a >> b;
 		
 		//-1 to count for the 0 indexing
 		while (!validMove){
-			validMove=test.makeMove(a-1,b-1,boardCell::red);
+			validMove=GameBoard.makeMove(a-1,b-1,boardCell::red);
 			if (!validMove){
 				std::cout << "Invalid Move. Try again...\nEnter row and column:"<<std::endl;
 				std::cin >> a >> b;
@@ -670,25 +767,16 @@ int main(){
 		}
 		validMove=0;
 		
-		test.printBoard();
-		if (test.isWinner(boardCell::red)){break;}
+		GameBoard.printBoard();
+		if (GameBoard.isWinner(boardCell::red)){break;}
 		
-		test.aiMove(boardCell::blue);
-		if (test.isWinner(boardCell::blue)){test.printBoard(); break;}
+		GameBoard.aiMove(boardCell::blue);
+		if (GameBoard.isWinner(boardCell::blue)){GameBoard.printBoard(); break;}
 		
 	}
 
-	test.printWinner();
+	GameBoard.printWinner();
 
-
-
-	//int retry=1;
-	//while (retry){
-		
-		//std::cout << "Try again? \n";
-		//std::cin >> retry;
-
-	//}
 
 return 0;
 }
